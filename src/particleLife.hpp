@@ -166,6 +166,15 @@ public:
 
   void onAnimate(al::DistributedAppWithState<TState>& app, double dt) {
     if (app.isPrimary()) {
+
+      // give the sim a kick every 7 seconds
+      static double phase = 0.0;
+      phase += dt;
+      if (phase >= 7.0) {
+        app.state().setParameters(app.state().numTypes);
+        phase = 0.0;
+      }
+
       app.state().update(); // <- simulation step
       for (int i = 0; i < app.state().numParticles; i++) {
         verts.vertices()[i] = app.state().swarm[i].position; // update mesh
