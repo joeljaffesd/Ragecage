@@ -18,11 +18,13 @@
   #define SPEAKER_LAYOUT al::AlloSphereSpeakerLayoutCompensated()
 #endif
 
-#include "al/app/al_App.hpp"
+#include "al/app/al_DistributedApp.hpp"
 #include "../Gimmel/include/gimmel.hpp"
 #include "../models/MarshallModel.h"
 
 #include "../RTNeural/modules/rt-nam/rt-nam.hpp"
+
+#include "particleLife.hpp"
 
 // Add NAM compatibility to giml
 namespace giml {
@@ -74,14 +76,16 @@ namespace giml {
   };
 } // namespace giml
 
-struct MyApp: public al::App {
+struct MyApp: public al::DistributedAppWithState<SimulationState> {
   giml::AmpModeler<float, MarshallModelLayer1, MarshallModelLayer2> mAmpModeler;
   MarshallModelWeights mWeights; // Marshall model weights
   giml::Expander<float> noiseGate{SAMPLE_RATE}; // Expander effect
   giml::Delay<float> longDelay{SAMPLE_RATE}; 
   giml::Delay<float> shortDelay{SAMPLE_RATE};  
+  SwarmManager<SimulationState> swarmManager;  
 
   void onInit() override { // Called on app start
+    swarmManager.onInit(*this);
     mAmpModeler.enable();
     mAmpModeler.loadModel(mWeights.weights); // Load the Marshall model weights
     noiseGate.setParams(-50.f, 4.f, 5.f);
@@ -100,15 +104,16 @@ struct MyApp: public al::App {
   }
 
   void onCreate() override { // Called when graphics context is available
+    swarmManager.onCreate(*this);
     std::cout << "onCreate()" << std::endl;
   }
 
   void onAnimate(double dt) override { // Called once before drawing
-    // 
+    swarmManager.onAnimate(*this, dt);
   } 
 
   void onDraw(al::Graphics& g) override { // Draw function  
-    g.clear();  
+    swarmManager.onDraw(*this, g);
   }
 
   void onSound(al::AudioIOData& io) override {
