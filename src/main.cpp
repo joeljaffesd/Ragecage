@@ -19,13 +19,84 @@
 #endif
 
 #include "al/app/al_App.hpp"
+#include "../Gimmel/include/gimmel.hpp"
+#include "../models/MarshallModel.h"
+
+#include "../RTNeural/modules/rt-nam/rt-nam.hpp"
+
+// Add NAM compatibility to giml
+namespace giml {
+  template<typename T, typename Layer1, typename Layer2>
+  class AmpModeler : public Effect<T>, public wavenet::RTWavenet<1, 1, Layer1, Layer2> {
+  public:
+    // Add default constructor
+    AmpModeler() {
+      // Initialize any necessary members here
+      this->enabled = false;
+    }
+
+    // Destructor
+    ~AmpModeler() {}
+
+    // Copy constructor
+    AmpModeler(const AmpModeler<T, Layer1, Layer2>& other) : 
+    Effect<T>(other), wavenet::RTWavenet<1, 1, Layer1, Layer2>(other) {}
+
+    // Copy assignment operator
+    AmpModeler<T, Layer1, Layer2>& operator=(const AmpModeler<T, Layer1, Layer2>& other) {
+      Effect<T>::operator=(other);
+      wavenet::RTWavenet<1, 1, Layer1, Layer2>::operator=(other);
+      return *this;
+    }
+
+    /**
+     * @brief Loads the amp model from a vector of weights
+     * 
+     * @param weights Vector of float weights for the neural network model
+     */
+    void loadModel(std::vector<float> weights) {
+      this->model.load_weights(weights);
+      this->model.prepare(1); // Prepare for single sample processing
+      this->model.prewarm();
+    }
+    
+    /**
+     * @brief Process a single sample through the amp model
+     * 
+     * @param input Input sample
+     * @return T Processed sample
+     */
+    T processSample(const T& input) override {
+      if (!this->enabled) { return input; }
+      return this->model.forward(input);;
+    }
+
+  };
+} // namespace giml
 
 struct MyApp: public al::App {
-
-  float color = 0.0;
+  giml::AmpModeler<float, MarshallModelLayer1, MarshallModelLayer2> mAmpModeler;
+  MarshallModelWeights mWeights; // Marshall model weights
+  giml::Expander<float> noiseGate{SAMPLE_RATE}; // Expander effect
+  giml::Delay<float> longDelay{SAMPLE_RATE}; 
+  giml::Delay<float> shortDelay{SAMPLE_RATE};  
 
   void onInit() override { // Called on app start
-    std::cout << "onInit()" << std::endl;
+    mAmpModeler.enable();
+    mAmpModeler.loadModel(mWeights.weights); // Load the Marshall model weights
+    noiseGate.setParams(-50.f, 4.f, 5.f);
+    noiseGate.enable();
+    noiseGate.toggleSideChain(true);
+    longDelay.enable();
+    shortDelay.enable();
+    longDelay.setDelayTime(798);
+    longDelay.setFeedback(0.20);
+    longDelay.setBlend(1.0);
+    longDelay.setDamping(0.7);
+    shortDelay.setDelayTime(398);
+    shortDelay.setFeedback(0.30);
+    shortDelay.setBlend(1.0);
+    shortDelay.setDamping(0.7);
   }
 
   void onCreate() override { // Called when graphics context is available
@@ -33,19 +104,26 @@ struct MyApp: public al::App {
   }
 
   void onAnimate(double dt) override { // Called once before drawing
-    color += 0.01f;
-    if (color > 1.f) {
-      color -= 1.f;
-    }
+    // 
   } 
 
   void onDraw(al::Graphics& g) override { // Draw function  
-    g.clear(color);  
+    g.clear();  
   }
 
-  void onSound(al::AudioIOData& io) override { // Audio callback  
-    while (io()) {    
-      io.out(0) = io.out(1) = 0.f;
+  void onSound(al::AudioIOData& io) override {
+    while(io()) {
+      float in = io.in(0);
+      noiseGate.feedSideChain(in); // Feed the noise gate with the input signal
+      float dry = mAmpModeler.processSample(in); // Process input through the amp modeler
+      dry = noiseGate.processSample(dry); // Apply noise gate
+      io.out(0) = dry + (0.31 * longDelay.processSample(dry));
+      io.out(1) = dry + (0.31 * shortDelay.processSample(dry));
+
+      for (int channel = 2; channel < io.channelsOut(); channel++) {
+        if (channel % 2 == 0) { io.out(channel) = io.out(0); } 
+        else                  { io.out(channel) = io.out(1); }
+      }
     }
   }
 
@@ -54,16 +132,14 @@ struct MyApp: public al::App {
   }
 
   bool onKeyDown(const al::Keyboard& k) override {
-    if (k.key() == ' ') {
-      color = 0.f;
-    }
+    // 
   }
 
 };
 
 int main() {
   MyApp app;
-  app.title("Main");
+  app.title("Ragecage");
   app.configureAudio(AUDIO_CONFIG);
   app.start();
   return 0;

@@ -27,6 +27,13 @@ if (EXISTS ${CMAKE_CURRENT_LIST_DIR}/al_ext)
   target_link_libraries(${APP_NAME} PRIVATE ${AL_EXT_LIBRARIES})
 endif()
 
+# add RTNeural submodule
+add_subdirectory(RTNeural)
+target_link_libraries(${APP_NAME} PRIVATE RTNeural)
+
+# add Gimmel include directory
+target_include_directories(${APP_NAME} PRIVATE Gimmel/include)
+
 # example line for find_package usage
 # find_package(Qt5Core REQUIRED CONFIG PATHS "C:/Qt/5.12.0/msvc2017_64/lib" NO_DEFAULT_PATH)
 
