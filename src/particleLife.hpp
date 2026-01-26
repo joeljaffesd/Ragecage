@@ -17,6 +17,8 @@
 #include "al_ext/statedistribution/al_CuttleboneDomain.hpp"
 #include "al_ext/statedistribution/al_CuttleboneStateSimulationDomain.hpp"
 
+#include "shaders.h"
+
 float fMap(float value, float in_min, float in_max, float out_min, float out_max) { // custom mapping function
   return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
@@ -124,6 +126,7 @@ template<class TState>
 class SwarmManager {
 private:
   al::Mesh verts;
+  al::ShaderProgram pointShader;
 
 public:
   void onInit(al::DistributedAppWithState<TState>& app) {
@@ -136,20 +139,25 @@ public:
   }
 
   void onCreate(al::DistributedAppWithState<TState>& app) {
+    // Compile shaders for point rendering
+    pointShader.compile(vert, frag, geo);
+
     if (app.isPrimary()) {
       app.state().seed();
       app.state().setParameters(app.state().numTypes);
-      app.state().pointSize = 5.f; // set point size
+      app.state().pointSize = 0.005f; // set point size (adjusted for shader)
       for (int i = 0; i < app.state().numParticles; i++) {
         verts.vertex(app.state().swarm[i].position);
         verts.color(al::HSV(app.state().swarm[i].type * app.state().colorStep, 1.f, 1.f));
+        verts.texCoord(1.0f, 0.0f); // particle size via texCoord (used by geometry shader)
       }
-      verts.primitive(al::Mesh::POINTS);      
+      verts.primitive(al::Mesh::POINTS);
     }
     else { // if not primary...
       for (int i = 0; i < app.state().numParticles; i++) {
         verts.vertex(app.state().swarm[i].position); // initializes wrong, overridden by onAnimate
         verts.color(al::HSV(app.state().swarm[i].type * app.state().colorStep, 1.f, 1.f)); // initializes wrong, overridden by onAnimate
+        verts.texCoord(1.0f, 0.0f); // particle size via texCoord
       }
       verts.primitive(al::Mesh::POINTS);
     }
@@ -171,11 +179,14 @@ public:
     }
   }
 
-  void onDraw(al::DistributedAppWithState<TState>& app, al::Graphics& g) { 
+  void onDraw(al::DistributedAppWithState<TState>& app, al::Graphics& g) {
     g.lens().eyeSep(0); // disable stereo
     g.clear(); // black background
-    g.pointSize(app.state().pointSize); // set pointSize
-    g.meshColor(); // color vertices based on type
+    g.shader(pointShader); // use custom point shader
+    g.shader().uniform("pointSize", app.state().pointSize); // pass pointSize uniform to shader
+    g.blending(true); // enable blending
+    g.blendTrans(); // transparent blending
+    g.depthTesting(true); // enable depth testing
     g.draw(verts); // draw verts
   }  
 
