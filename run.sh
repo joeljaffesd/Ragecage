@@ -13,5 +13,5 @@ cmake -DCMAKE_BUILD_TYPE=Release -Wno-deprecated -DBUILD_EXAMPLES=0 -B build/Rel
 result=$?
 if [ ${result} == 0 ]; then
   cd bin
-  ./Allolib-Kickstart
+  ./RAGECAGE
 fi
