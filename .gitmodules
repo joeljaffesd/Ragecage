@@ -7,3 +7,6 @@
 [submodule "RTNeural"]
 	path = RTNeural
 	url = https://github.com/joeljaffesd/RTNeural
+[submodule "Gimmel"]
+	path = Gimmel
+	url = https://github.com/jaffco/Gimmel
