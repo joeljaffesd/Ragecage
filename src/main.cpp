@@ -76,13 +76,41 @@ namespace giml {
   };
 } // namespace giml
 
+class Detector {
+private:
+  float aAttack, aRelease;
+  giml::Vactrol<float> mVactrol;  
+
+public: 
+  Detector() = delete;
+  Detector(int samplerate) : mVactrol(samplerate) {
+    aAttack = giml::timeConstant(7.76, samplerate);
+    aRelease = giml::timeConstant(1105.0, samplerate);
+  }
+
+  float processSample(const float& in) {
+
+    float rectfied = abs(in);
+    float cutoff = mVactrol(rectfied);    
+
+    // "double warp"
+    cutoff = std::log10((cutoff * 9.0f) + 1.0f); // basic curve 
+    cutoff = std::sqrt(cutoff);  // ^0.5, general form is ^(1 / sensitivity)
+    cutoff = giml::scale(cutoff, 0, 1, 0, 0.005); // map to frequency range
+
+    return cutoff;
+  }
+
+};
+
 struct MyApp: public al::DistributedAppWithState<SimulationState> {
   giml::AmpModeler<float, MarshallModelLayer1, MarshallModelLayer2> mAmpModeler;
   MarshallModelWeights mWeights; // Marshall model weights
   giml::Expander<float> noiseGate{SAMPLE_RATE}; // Expander effect
   giml::Delay<float> longDelay{SAMPLE_RATE}; 
   giml::Delay<float> shortDelay{SAMPLE_RATE};  
-  SwarmManager<SimulationState> swarmManager;  
+  SwarmManager<SimulationState> swarmManager;
+  Detector mDetector{SAMPLE_RATE};
 
   void onInit() override { // Called on app start
     swarmManager.onInit(*this);
@@ -117,17 +145,19 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
   }
 
   void onSound(al::AudioIOData& io) override {
-    while(io()) {
-      float in = io.in(0);
-      noiseGate.feedSideChain(in); // Feed the noise gate with the input signal
-      float dry = mAmpModeler.processSample(in); // Process input through the amp modeler
-      dry = noiseGate.processSample(dry); // Apply noise gate
-      io.out(0) = dry + (0.31 * longDelay.processSample(dry));
-      io.out(1) = dry + (0.31 * shortDelay.processSample(dry));
-
-      for (int channel = 2; channel < io.channelsOut(); channel++) {
-        if (channel % 2 == 0) { io.out(channel) = io.out(0); } 
-        else                  { io.out(channel) = io.out(1); }
+    if (isPrimary()){
+      while(io()) {
+        float in = io.in(0);
+        noiseGate.feedSideChain(in); // Feed the noise gate with the input signal
+        float dry = mAmpModeler.processSample(in); // Process input through the amp modeler
+        dry = noiseGate.processSample(dry); // Apply noise gate
+        io.out(0) = dry + (0.31 * longDelay.processSample(dry));
+        io.out(1) = dry + (0.31 * shortDelay.processSample(dry));
+        state().pointSize = mDetector.processSample(io.out(0)); // Update point size based on input level
+        for (int channel = 2; channel < io.channelsOut(); channel++) {
+          if (channel % 2 == 0) { io.out(channel) = io.out(0); } 
+          else                  { io.out(channel) = io.out(1); }
+        }
       }
     }
   }
