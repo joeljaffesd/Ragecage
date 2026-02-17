@@ -19,6 +19,8 @@
 #endif
 
 #include "al/app/al_DistributedApp.hpp"
+#include "al/app/al_GUIDomain.hpp"
+#include "al/ui/al_Parameter.hpp"
 #include "../Gimmel/include/gimmel.hpp"
 #include "../models/MarshallModel.h"
 
@@ -184,9 +186,18 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
   Detector mDetector{SAMPLE_RATE};
   AudioEventTrigger mEventTrigger{SAMPLE_RATE};
   std::atomic<bool> mParamUpdatePending{false};
+  al::ParameterBool whiteBackground{"White Background", "", 0.0f};
+  std::shared_ptr<al::GUIDomain> mGUIDomain;
 
   void onInit() override { // Called on app start
     swarmManager.onInit(*this);
+
+    if (isPrimary()) {
+      mGUIDomain = al::GUIDomain::enableGUI(defaultWindowDomain());
+      auto& gui = mGUIDomain->newGUI();
+      gui.setTitle("Ragecage");
+    }
+
     mAmpModeler.enable();
     mAmpModeler.loadModel(mWeights.weights); // Load the Marshall model weights
     noiseGate.setParams(-50.f, 4.f, 5.f);
