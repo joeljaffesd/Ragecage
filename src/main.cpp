@@ -186,7 +186,7 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
   Detector mDetector{SAMPLE_RATE};
   AudioEventTrigger mEventTrigger{SAMPLE_RATE};
   std::atomic<bool> mParamUpdatePending{false};
-  al::ParameterBool whiteBackground{"White Background", "", 0.0f};
+  al::ParameterBool useGLPoints{"Use GL Points", "", 1.0f};
   std::shared_ptr<al::GUIDomain> mGUIDomain;
 
   void onInit() override { // Called on app start
@@ -196,6 +196,13 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
       mGUIDomain = al::GUIDomain::enableGUI(defaultWindowDomain());
       auto& gui = mGUIDomain->newGUI();
       gui.setTitle("Ragecage");
+      gui << useGLPoints;
+
+      useGLPoints.registerChangeCallback([this](float value) {
+        state().useGLPoints = (value > 0.5f);
+      });
+
+      state().useGLPoints = (useGLPoints.get() > 0.5f);
     }
 
     mAmpModeler.enable();
@@ -228,6 +235,8 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
   } 
 
   void onDraw(al::Graphics& g) override { // Draw function  
+    g.lens().eyeSep(0); // disable stereo
+    g.clear();
     swarmManager.onDraw(*this, g);
   }
 

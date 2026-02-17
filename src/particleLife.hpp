@@ -141,9 +141,7 @@ public:
 
   void onCreate(al::DistributedAppWithState<TState>& app) {
     // Compile shaders for point rendering
-    if (!app.state().useGLPoints) {
-      pointShader.compile(vert, frag, geo);
-    }
+    pointShader.compile(vert, frag, geo);
 
     if (app.isPrimary()) {
       app.state().seed();
@@ -192,9 +190,6 @@ public:
   }
 
   void onDraw(al::DistributedAppWithState<TState>& app, al::Graphics& g) {
-    g.lens().eyeSep(0); // disable stereo
-    g.clear(); // black background
-
     if (app.state().useGLPoints) {
       float glPointSize = app.state().pointSize * 1800.0f;
       if (glPointSize < 1.0f) { glPointSize = 1.0f; }
