@@ -2,7 +2,7 @@
 // Basic AlloApp demonstrating how to use the App class's callbacks
 
 // Single macro to switch between desktop and Allosphere configurations
-#define DESKTOP
+// #define DESKTOP
 
 #ifdef DESKTOP
   // Desktop configuration
@@ -176,6 +176,9 @@ public:
   }
 };
 
+std::vector<int> LeftSpeakerGroup{ 0, 1, 2, 9, 10, 11, 16, 17, 18, 19, 20, 21, 22, 23, 39, 40, 41, 42, 43, 45, 48, 49, 50, 57, 58, 59 };
+std::vector<int> RightSpeakerGroup{ 3, 4, 5, 6, 7, 8, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35 , 36, 37, 38, 51, 52, 53, 54, 55, 56 };
+
 struct MyApp: public al::DistributedAppWithState<SimulationState> {
   giml::AmpModeler<float, MarshallModelLayer1, MarshallModelLayer2> mAmpModeler;
   MarshallModelWeights mWeights; // Marshall model weights
@@ -247,15 +250,32 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
         noiseGate.feedSideChain(in); // Feed the noise gate with the input signal
         float dry = mAmpModeler.processSample(in); // Process input through the amp modeler
         dry = noiseGate.processSample(dry); // Apply noise gate
-        io.out(0) = dry + (0.31 * longDelay.processSample(dry));
-        io.out(1) = dry + (0.31 * shortDelay.processSample(dry));
-        state().pointSize = mDetector.processSample(io.out(0)); // Update point size based on input level
-        if (mEventTrigger.processSample(io.out(0))) {
+        float left, right;
+        left = dry + (0.31 * longDelay.processSample(dry));
+        right = dry + (0.31 * shortDelay.processSample(dry));
+        state().pointSize = mDetector.processSample(left); // Update point size based on input level
+        if (mEventTrigger.processSample(left)) {
           mParamUpdatePending.store(true, std::memory_order_relaxed);
         }
-        for (int channel = 2; channel < io.channelsOut(); channel++) {
-          if (channel % 2 == 0) { io.out(channel) = io.out(0); } 
-          else                  { io.out(channel) = io.out(1); }
+
+        // sphere
+        #ifndef DESKTOP
+        for (auto& speaker : LeftSpeakerGroup) {
+          io.out(speaker) = left;
+        }
+        for (auto& speaker : RightSpeakerGroup) {
+          io.out(speaker) = right;
+        }
+
+        // mix for sub
+        io.out(47) = (left + right) * 0.5f;
+        return;
+        #endif
+
+        // "multi-stereo"
+        for (int channel = 0; channel < io.channelsOut(); channel++) {
+          if (channel % 2 == 0) { io.out(channel) = left; } 
+          else                  { io.out(channel) = right; }
         }
       }
     }
