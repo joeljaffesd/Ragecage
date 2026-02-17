@@ -36,6 +36,7 @@ struct Particle { // Particle struct
 struct SimulationState {
   // state() member variables
   float pointSize;
+  bool useGLPoints = false;
   float simScale = 0.5f;
   float springConstant = 0.4f;
 
@@ -140,7 +141,9 @@ public:
 
   void onCreate(al::DistributedAppWithState<TState>& app) {
     // Compile shaders for point rendering
-    pointShader.compile(vert, frag, geo);
+    if (!app.state().useGLPoints) {
+      pointShader.compile(vert, frag, geo);
+    }
 
     if (app.isPrimary()) {
       app.state().seed();
@@ -191,8 +194,18 @@ public:
   void onDraw(al::DistributedAppWithState<TState>& app, al::Graphics& g) {
     g.lens().eyeSep(0); // disable stereo
     g.clear(); // black background
-    g.shader(pointShader); // use custom point shader
-    g.shader().uniform("pointSize", app.state().pointSize); // pass pointSize uniform to shader
+
+    if (app.state().useGLPoints) {
+      float glPointSize = app.state().pointSize * 1800.0f;
+      if (glPointSize < 1.0f) { glPointSize = 1.0f; }
+      g.pointSize(glPointSize);
+      g.meshColor();
+      g.lighting(false);
+    } else {
+      g.shader(pointShader); // use custom point shader
+      g.shader().uniform("pointSize", app.state().pointSize); // pass pointSize uniform to shader
+    }
+
     g.blending(true); // enable blending
     g.blendTrans(); // transparent blending
     g.depthTesting(true); // enable depth testing
