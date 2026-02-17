@@ -88,7 +88,7 @@ public:
   Detector() = delete;
   Detector(int samplerate) : mVactrol(samplerate) {
     aAttack = giml::timeConstant(7.76, samplerate);
-    aRelease = giml::timeConstant(1105.0, samplerate);
+    aRelease = giml::timeConstant(105.0, samplerate);
   }
 
   float processSample(const float& in) {
