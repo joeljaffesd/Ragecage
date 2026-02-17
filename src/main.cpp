@@ -22,6 +22,8 @@
 #include "../Gimmel/include/gimmel.hpp"
 #include "../models/MarshallModel.h"
 
+#include <atomic>
+
 #include "../RTNeural/modules/rt-nam/rt-nam.hpp"
 
 #include "particleLife.hpp"
@@ -79,6 +81,7 @@ namespace giml {
 class Detector {
 private:
   float aAttack, aRelease;
+  float envelope = 0.0f;
   giml::Vactrol<float> mVactrol;  
 
 public: 
@@ -91,7 +94,13 @@ public:
   float processSample(const float& in) {
 
     float rectfied = abs(in);
-    float cutoff = mVactrol(rectfied);    
+    if (rectfied > envelope) {
+      envelope = rectfied + (aAttack * (envelope - rectfied));
+    } else {
+      envelope = rectfied + (aRelease * (envelope - rectfied));
+    }
+
+    float cutoff = mVactrol(envelope);
 
     // "double warp"
     cutoff = std::log10((cutoff * 9.0f) + 1.0f); // basic curve 
@@ -103,6 +112,68 @@ public:
 
 };
 
+class AudioEventTrigger {
+private:
+  float fastEnv = 0.0f;
+  float slowEnv = 0.0f;
+  float novelty = 0.0f;
+
+  float aFastAttack;
+  float aFastRelease;
+  float aSlowAttack;
+  float aSlowRelease;
+  float aNovelty;
+
+  float highThreshold = 0.035f;
+  float lowThreshold = 0.020f;
+
+  int cooldownSamples = 0;
+  int cooldownCounter = 0;
+  bool inEvent = false;
+
+public:
+  AudioEventTrigger() = delete;
+  AudioEventTrigger(int sampleRate) {
+    aFastAttack = giml::timeConstant(2.0, sampleRate);
+    aFastRelease = giml::timeConstant(30.0, sampleRate);
+    aSlowAttack = giml::timeConstant(80.0, sampleRate);
+    aSlowRelease = giml::timeConstant(280.0, sampleRate);
+    aNovelty = giml::timeConstant(40.0, sampleRate);
+    cooldownSamples = static_cast<int>(0.35f * sampleRate);
+  }
+
+  bool processSample(float in) {
+    float x = abs(in);
+
+    if (x > fastEnv) { fastEnv = x + (aFastAttack * (fastEnv - x)); }
+    else             { fastEnv = x + (aFastRelease * (fastEnv - x)); }
+
+    if (x > slowEnv) { slowEnv = x + (aSlowAttack * (slowEnv - x)); }
+    else             { slowEnv = x + (aSlowRelease * (slowEnv - x)); }
+
+    float delta = fastEnv - slowEnv;
+    if (delta < 0.0f) { delta = 0.0f; }
+    novelty = delta + (aNovelty * (novelty - delta));
+
+    if (cooldownCounter > 0) {
+      cooldownCounter--;
+      return false;
+    }
+
+    if (!inEvent && novelty > highThreshold) {
+      inEvent = true;
+      cooldownCounter = cooldownSamples;
+      return true;
+    }
+
+    if (inEvent && novelty < lowThreshold) {
+      inEvent = false;
+    }
+
+    return false;
+  }
+};
+
 struct MyApp: public al::DistributedAppWithState<SimulationState> {
   giml::AmpModeler<float, MarshallModelLayer1, MarshallModelLayer2> mAmpModeler;
   MarshallModelWeights mWeights; // Marshall model weights
@@ -111,6 +182,8 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
   giml::Delay<float> shortDelay{SAMPLE_RATE};  
   SwarmManager<SimulationState> swarmManager;
   Detector mDetector{SAMPLE_RATE};
+  AudioEventTrigger mEventTrigger{SAMPLE_RATE};
+  std::atomic<bool> mParamUpdatePending{false};
 
   void onInit() override { // Called on app start
     swarmManager.onInit(*this);
@@ -137,6 +210,9 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
   }
 
   void onAnimate(double dt) override { // Called once before drawing
+    if (isPrimary() && mParamUpdatePending.exchange(false, std::memory_order_relaxed)) {
+      state().setParameters(state().numTypes);
+    }
     swarmManager.onAnimate(*this, dt);
   } 
 
@@ -154,6 +230,9 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
         io.out(0) = dry + (0.31 * longDelay.processSample(dry));
         io.out(1) = dry + (0.31 * shortDelay.processSample(dry));
         state().pointSize = mDetector.processSample(io.out(0)); // Update point size based on input level
+        if (mEventTrigger.processSample(io.out(0))) {
+          mParamUpdatePending.store(true, std::memory_order_relaxed);
+        }
         for (int channel = 2; channel < io.channelsOut(); channel++) {
           if (channel % 2 == 0) { io.out(channel) = io.out(0); } 
           else                  { io.out(channel) = io.out(1); }
