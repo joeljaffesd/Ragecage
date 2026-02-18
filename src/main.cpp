@@ -191,6 +191,7 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
   std::atomic<bool> mParamUpdatePending{false};
   al::ParameterBool useGLPoints{"Use GL Points", "", 1.0f};
   std::shared_ptr<al::GUIDomain> mGUIDomain;
+  al::ParameterColor clearColor{"clearColor"};
 
   void onInit() override { // Called on app start
     swarmManager.onInit(*this);
@@ -200,6 +201,7 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
       auto& gui = mGUIDomain->newGUI();
       gui.setTitle("Ragecage");
       gui << useGLPoints;
+      gui << clearColor;
 
       useGLPoints.registerChangeCallback([this](float value) {
         state().useGLPoints = (value > 0.5f);
@@ -207,6 +209,8 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
 
       state().useGLPoints = (useGLPoints.get() > 0.5f);
     }
+
+    parameterServer() << clearColor;
 
     mAmpModeler.enable();
     mAmpModeler.loadModel(mWeights.weights); // Load the Marshall model weights
@@ -239,7 +243,8 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
 
   void onDraw(al::Graphics& g) override { // Draw function  
     g.lens().eyeSep(0); // disable stereo
-    g.clear();
+    g.clearColor(clearColor.get().r,clearColor.get().g,clearColor.get().b);
+    g.clear(clearColor.get());
     swarmManager.onDraw(*this, g);
   }
 
