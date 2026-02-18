@@ -269,14 +269,14 @@ struct MyApp: public al::DistributedAppWithState<SimulationState> {
 
         // mix for sub
         io.out(47) = (left + right) * 0.5f;
-        return;
+        //return;
         #endif
 
         // "multi-stereo"
-        for (int channel = 0; channel < io.channelsOut(); channel++) {
-          if (channel % 2 == 0) { io.out(channel) = left; } 
-          else                  { io.out(channel) = right; }
-        }
+        //for (int channel = 0; channel < io.channelsOut(); channel++) {
+        //  if (channel % 2 == 0) { io.out(channel) = left; } 
+        //  else                  { io.out(channel) = right; }
+        //}
       }
     }
   }
